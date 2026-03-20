@@ -58,16 +58,17 @@ def fetch_pit_stops(season: int, races: list[dict]) -> list[dict]:
     rows = []
     for race in races:
         round_num = race["round"]
-        for stop in get_pit_stops(season, round_num):
-            rows.append({
-                "season":    season,
-                "round":     round_num,
-                "driver_id": stop["driverId"],
-                "stop":      int(stop["stop"]),
-                "lap":       int(stop["lap"]),
-                "time":      stop.get("time"),
-                "duration":  stop.get("duration"),
-            })
+        for race_obj in get_pit_stops(season, round_num):
+            for stop in race_obj.get("PitStops", []):
+                rows.append({
+                    "season":    season,
+                    "round":     round_num,
+                    "driver_id": stop["driverId"],
+                    "stop":      int(stop["stop"]),
+                    "lap":       int(stop["lap"]),
+                    "time":      stop.get("time"),
+                    "duration":  stop.get("duration"),
+                })
     return rows
 
 
@@ -75,17 +76,18 @@ def fetch_lap_times(season: int, races: list[dict]) -> list[dict]:
     rows = []
     for race in races:
         round_num = race["round"]
-        for lap_obj in get_lap_times(season, round_num):
-            lap_num = int(lap_obj["number"])
-            for timing in lap_obj.get("Timings", []):
-                rows.append({
-                    "season":    season,
-                    "round":     round_num,
-                    "lap":       lap_num,
-                    "driver_id": timing["driverId"],
-                    "position":  int(timing.get("position", 0)),
-                    "time":      timing.get("time"),
-                })
+        for race_obj in get_lap_times(season, round_num):
+            for lap_obj in race_obj.get("Laps", []):
+                lap_num = int(lap_obj["number"])
+                for timing in lap_obj.get("Timings", []):
+                    rows.append({
+                        "season":    season,
+                        "round":     round_num,
+                        "lap":       lap_num,
+                        "driver_id": timing["driverId"],
+                        "position":  int(timing.get("position", 0)),
+                        "time":      timing.get("time"),
+                    })
     return rows
 
 

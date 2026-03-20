@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-BASE_URL = "http://ergast.com/api/f1"
+BASE_URL = "https://api.jolpi.ca/ergast/f1"
 CACHE_DIR = Path(__file__).parent.parent / "data" / "raw"
 REQUEST_DELAY = 0.2  # seconds between requests to respect rate limits
 
