@@ -214,7 +214,7 @@ def build_features(
         right_on=['season', 'round', 'driver_id', 'lap'],
         how='left'
     )
-    df['gap_to_car_ahead'] = (df['pos_at_pit'] - 1).clip(lower=0)
+    df['gap_to_car_ahead'] = (df['pos_at_pit'] - 1).clip(lower=0).fillna(0)
 
     # 3. is_undercut_attempt
     pit_laps_map = (

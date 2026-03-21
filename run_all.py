@@ -65,7 +65,7 @@ def run_notebook(path: str) -> bool:
             "--to", "notebook",
             "--execute",
             "--inplace",
-            "--ExecutePreprocessor.timeout=600",
+            "--ExecutePreprocessor.timeout=3600",
             str(ROOT / path),
         ],
         capture_output=False,

@@ -18,9 +18,33 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.api import get_drivers, get_lap_times, get_pit_stops, get_races, get_results
 
-SEASONS = range(2011, 2024)
+SEASONS = list(range(2011, 2024))
 DATA_DIR = Path(__file__).parent
 
+# ── progress helpers ──────────────────────────────────────────────────────────
+
+def _bar(done: int, total: int, width: int = 20) -> str:
+    filled = int(width * done / total) if total else 0
+    return f"[{'█' * filled}{'░' * (width - filled)}] {done}/{total}"
+
+def _pct(done: int, total: int) -> str:
+    return f"{100 * done / total:.0f}%" if total else "0%"
+
+def _progress(season: int, step: str, round_done: int = 0, round_total: int = 0):
+    season_idx = SEASONS.index(season) + 1
+    season_total = len(SEASONS)
+    season_pct = _pct(season_idx - 1, season_total)  # pct before this season completes
+    if round_total:
+        print(
+            f"  [{season_pct} overall | season {season_idx}/{season_total}] "
+            f"{step}: {_bar(round_done, round_total)} ({_pct(round_done, round_total)})",
+            end="\r", flush=True,
+        )
+    else:
+        print(f"  [{season_pct} overall | season {season_idx}/{season_total}] {step}...",
+              end=" ", flush=True)
+
+# ── fetchers ──────────────────────────────────────────────────────────────────
 
 def fetch_races(season: int) -> list[dict]:
     rows = []
@@ -56,38 +80,60 @@ def fetch_results(season: int) -> list[dict]:
 
 def fetch_pit_stops(season: int, races: list[dict]) -> list[dict]:
     rows = []
-    for race in races:
+    total = len(races)
+    skipped = []
+    for i, race in enumerate(races):
         round_num = race["round"]
-        for race_obj in get_pit_stops(season, round_num):
-            for stop in race_obj.get("PitStops", []):
-                rows.append({
-                    "season":    season,
-                    "round":     round_num,
-                    "driver_id": stop["driverId"],
-                    "stop":      int(stop["stop"]),
-                    "lap":       int(stop["lap"]),
-                    "time":      stop.get("time"),
-                    "duration":  stop.get("duration"),
-                })
+        _progress(season, "pit stops", i, total)
+        try:
+            for race_obj in get_pit_stops(season, round_num):
+                for stop in race_obj.get("PitStops", []):
+                    rows.append({
+                        "season":    season,
+                        "round":     round_num,
+                        "driver_id": stop["driverId"],
+                        "stop":      int(stop["stop"]),
+                        "lap":       int(stop["lap"]),
+                        "time":      stop.get("time"),
+                        "duration":  stop.get("duration"),
+                    })
+        except (RuntimeError, Exception) as e:
+            skipped.append(round_num)
+            print(f"\n  ⚠ Skipped {season} R{round_num} pit stops ({e})")
+    _progress(season, "pit stops", total, total)
+    print()
+    if skipped:
+        print(f"  ⚠ Skipped rounds: {skipped} (rate limited — re-run later to fill gaps)")
     return rows
 
 
 def fetch_lap_times(season: int, races: list[dict]) -> list[dict]:
     rows = []
-    for race in races:
+    total = len(races)
+    skipped = []
+    for i, race in enumerate(races):
         round_num = race["round"]
-        for race_obj in get_lap_times(season, round_num):
-            for lap_obj in race_obj.get("Laps", []):
-                lap_num = int(lap_obj["number"])
-                for timing in lap_obj.get("Timings", []):
-                    rows.append({
-                        "season":    season,
-                        "round":     round_num,
-                        "lap":       lap_num,
-                        "driver_id": timing["driverId"],
-                        "position":  int(timing.get("position", 0)),
-                        "time":      timing.get("time"),
-                    })
+        _progress(season, "lap times", i, total)
+        try:
+            for race_obj in get_lap_times(season, round_num):
+                for lap_obj in race_obj.get("Laps", []):
+                    lap_num = int(lap_obj["number"])
+                    for timing in lap_obj.get("Timings", []):
+                        rows.append({
+                            "season":    season,
+                            "round":     round_num,
+                            "lap":       lap_num,
+                            "driver_id": timing["driverId"],
+                            "position":  int(timing.get("position", 0)),
+                            "time":      timing.get("time"),
+                        })
+        except (RuntimeError, Exception) as e:
+            skipped.append(round_num)
+            print(f"\n  ⚠ Skipped {season} R{round_num} lap times ({e})")
+    _progress(season, "lap times", total, total)
+    print()
+    if skipped:
+        print(f"  ⚠ Skipped rounds: {skipped} (rate limited — re-run later to fill gaps)")
     return rows
 
 
@@ -104,6 +150,8 @@ def fetch_drivers(season: int) -> list[dict]:
     return rows
 
 
+# ── main ──────────────────────────────────────────────────────────────────────
+
 def main():
     all_races = []
     all_results = []
@@ -111,30 +159,38 @@ def main():
     all_lap_times = []
     all_drivers = []
 
-    for season in SEASONS:
-        print(f"Season {season}...")
+    total_seasons = len(SEASONS)
+    for idx, season in enumerate(SEASONS):
+        overall_pct = _pct(idx, total_seasons)
+        print(f"\n{'─' * 50}")
+        print(f"Season {season}  [{idx + 1}/{total_seasons}]  {overall_pct} overall")
+        print(f"{'─' * 50}")
 
+        _progress(season, "races")
         races = fetch_races(season)
         all_races.extend(races)
-        print(f"  {len(races)} races")
+        print(f"✓  {len(races)} races")
 
+        _progress(season, "results")
         results = fetch_results(season)
         all_results.extend(results)
-        print(f"  {len(results)} results")
+        print(f"✓  {len(results)} results")
 
         pit_stops = fetch_pit_stops(season, races)
         all_pit_stops.extend(pit_stops)
-        print(f"  {len(pit_stops)} pit stops")
+        print(f"  └─ {len(pit_stops)} pit stops collected")
 
         lap_times = fetch_lap_times(season, races)
         all_lap_times.extend(lap_times)
-        print(f"  {len(lap_times)} lap time records")
+        print(f"  └─ {len(lap_times):,} lap time records collected")
 
+        _progress(season, "drivers")
         drivers = fetch_drivers(season)
         all_drivers.extend(drivers)
-        print(f"  {len(set(d['driver_id'] for d in drivers))} drivers")
+        print(f"✓  {len(set(d['driver_id'] for d in drivers))} drivers")
 
-    print("\nSaving CSVs...")
+    print(f"\n{'─' * 50}")
+    print("100% — Saving CSVs...")
     pd.DataFrame(all_races).to_csv(DATA_DIR / "races.csv", index=False)
     pd.DataFrame(all_results).to_csv(DATA_DIR / "results.csv", index=False)
     pd.DataFrame(all_pit_stops).to_csv(DATA_DIR / "pit_stops.csv", index=False)
@@ -143,7 +199,7 @@ def main():
         DATA_DIR / "drivers.csv", index=False
     )
 
-    print("Done.")
+    print("\nDone.")
     print(f"  races.csv:     {len(all_races):,} rows")
     print(f"  results.csv:   {len(all_results):,} rows")
     print(f"  pit_stops.csv: {len(all_pit_stops):,} rows")
